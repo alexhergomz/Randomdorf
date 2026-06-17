@@ -71,11 +71,14 @@ godot --path godot -- --lodview    # coloured LOD rings
 
 `godot/run.sh` forces the integrated GPU, a hybrid-laptop workaround you can ignore otherwise.
 
-## Notes / maybe later
+## Notes
 
 - Foam is a cheap Jacobian-fold plus crest term, with no accumulation or advection.
 - Steepness is pushed past the physical PM significant wave height for looks.
 - Deep-water dispersion only.
-- A small scrolling normal map could add the sub-metre ripple the mesh is too coarse to carry.
 
-This leaves raw spectral detail to FFT and focuses on the light, seamless, query-anywhere side.
+## Maybe later
+
+- A scrolling detail normal map for the sub-metre ripple the mesh is too coarse to carry.
+- Shallow-water dispersion (tanh(kd)) for coastlines.
+- Foam that accumulates and advects instead of being recomputed per frame.
