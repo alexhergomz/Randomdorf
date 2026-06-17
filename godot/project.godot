@@ -1,0 +1,15 @@
+; Engine configuration file.
+; RFF Tessendorf ocean — minimal project for verification render.
+
+config_version=5
+
+[application]
+
+config/name="RFF Tessendorf Ocean"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.5", "Forward Plus")
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+environment/defaults/default_clear_color=Color(0.4, 0.6, 0.8, 1)
