@@ -2,61 +2,63 @@
 
 Real-valued ocean waves with Random Fourier Features instead of an FFT.
 
-> **WIP / experiment.** Built to see how far a Tessendorf-style ocean gets as a direct
-> sum of spectrally-sampled waves — no FFT, no displacement textures — and where that
-> actually pays off against the usual FFT pipeline. Not production-ready.
+> WIP / experiment. Built to see how far a Tessendorf-style ocean gets when you sum
+> spectral waves directly rather than running an FFT, and where that pays off against the
+> usual FFT pipeline. Still rough.
 
 ![ocean](media/ocean.gif)
 
 ## Idea
 
-The standard Tessendorf ocean draws a Gaussian height field by inverse-FFT of an
-oceanographic spectrum (Phillips / Pierson–Moskowitz / JONSWAP). That field is itself a sum
-of sinusoids, so instead of transforming a full grid you can **sample `M` wave components
-straight from the spectrum and add them per vertex**. Pick the modes from the spectrum
-(Wiener–Khinchin / random-phase model — the "RFF" view from kernel methods) and the
-statistics match. The whole thing is one spatial shader: vertex displacement + analytic
-normals, no compute, no ping-pong textures.
+The standard Tessendorf ocean builds a Gaussian height field by inverse-FFT of an
+oceanographic spectrum (Phillips, Pierson-Moskowitz, JONSWAP). That field is itself a sum of
+sinusoids, so you can sample M wave components straight from the spectrum and add them per
+vertex instead of transforming a full grid. Pick the modes from the spectrum (Wiener-Khinchin
+/ random-phase model, the "RFF" view from kernel methods) and the statistics match. The whole
+thing fits in one spatial shader that does the displacement and the analytic normals, with
+nothing else in the pipeline.
 
-`analysis/verify_rff.py` checks it against the spectrum: variance = σ², autocovariance =
-∫F(k)·J₀(kr)dk, Gaussian heights, M^(−1/2) convergence.
+`analysis/verify_rff.py` checks it against the spectrum: variance equals sigma^2,
+autocovariance equals the analytic integral of F(k)*J0(kr), heights are Gaussian, and the
+error drops as M^(-1/2).
 
 ## LOD
 
-Because it's a sum of components, level-of-detail just **omits** the modes a tile's grid
-can't resolve (Nyquist) — no extra cost, no cracks (each mode fades with distance,
-identically across tiles, so boundaries line up). Grid resolution scales with the render
-resolution. Rings coloured by level:
+Because it is a sum of components, a level of detail simply drops the modes a tile's grid is
+too coarse to resolve (Nyquist). It costs nothing extra and the seams stay closed: every mode
+fades with distance the same way on both sides of a boundary, so the tiles line up. Grid
+resolution scales with the render resolution. Rings coloured by level:
 
 ![lod](media/lodview.gif)
 
-## RFF vs FFT — honest
+## RFF vs FFT, measured
 
-Measured on an RTX 4050 (`analysis/bench_gpu.py`):
+On an RTX 4050 (`analysis/bench_gpu.py`):
 
 | | FFT Tessendorf (3 cascades) | RFF (M=64, with LOD) |
 |---|---|---|
 | GPU / frame | ~0.55 ms | ~0.90 ms |
-| Memory | ~5–12 MB (spectra + maps) | ~2 KB (wave table) |
+| Memory | 5 to 12 MB (spectra + maps) | ~2 KB (wave table) |
 | Spectral detail | thousands of modes | 64 modes |
 | Normals | extra transforms | analytic, free |
-| Query any point (buoyancy) | sample a texture | direct `h(x,z,t)` |
-| Tiling | repeats; needs blending to hide | none needed |
-| LOD | cascades / mip (awkward) | omit modes (free) |
+| Query any point (buoyancy) | sample a texture | direct h(x,z,t) |
+| Tiling | repeats, needs blending to hide | seamless by construction |
+| LOD | cascades / mip, awkward | drop modes, free |
 
-**FFT is faster and richer, and that's fundamental.** One transform yields all N² modes in
-O(N² log N) — `log R` work per output point versus `M` for RFF — so for a dense, detailed
-field nothing beats it. Production FFT oceans are also a solved, well-tooled problem (see
-Tessendorf's notes, and Ubisoft's [tiling-and-blending writeup](https://www.ubisoft.com/en-us/studio/laforge/news/5WHMK3tLGMGsqhxmWls1Jw/making-waves-in-ocean-surface-rendering-using-tiling-and-blending)
-on the machinery needed just to hide tile repetition).
+FFT is faster and carries far more detail, and that is fundamental. One transform yields all
+N^2 modes in O(N^2 log N), which works out to log R per output point against M for RFF, so for
+a dense detailed field it wins outright. Production FFT oceans are also a solved, well-tooled
+problem (see Tessendorf's notes, and Ubisoft's
+[tiling-and-blending writeup](https://www.ubisoft.com/en-us/studio/laforge/news/5WHMK3tLGMGsqhxmWls1Jw/making-waves-in-ocean-surface-rendering-using-tiling-and-blending)
+on the machinery used just to hide tile repetition).
 
-**RFF trades throughput for memory and simplicity:** ~1000× less memory, no
-FFT/compute/texture pipeline (one shader), exact analytic normals, evaluate the surface at
-any point (cheap buoyancy), no tiling repetition, and free Nyquist LOD.
+RFF trades that throughput for memory and a simple pipeline: roughly 1000x less memory, a
+single shader, exact analytic normals, the surface value at any point for cheap buoyancy,
+coverage that stays seamless, and Nyquist LOD for free.
 
-So — FFT for a detailed AAA ocean; RFF when memory or pipeline simplicity matters
-(mobile/web, many small water bodies, lots of physics queries) or when you want
-repetition-free water with trivial LOD.
+Use FFT for a detailed AAA ocean. Reach for RFF when memory or pipeline simplicity matter
+(mobile, web, many small water bodies, lots of physics queries), or when you want seamless
+coverage with cheap LOD.
 
 ## Run
 
@@ -67,13 +69,13 @@ godot --path godot                 # ocean
 godot --path godot -- --lodview    # coloured LOD rings
 ```
 
-`godot/run.sh` forces the integrated GPU (a hybrid-laptop workaround; ignore otherwise).
+`godot/run.sh` forces the integrated GPU, a hybrid-laptop workaround you can ignore otherwise.
 
 ## Notes / maybe later
 
-- Foam is a cheap Jacobian-fold + crest term — no accumulation or advection.
-- Steepness is boosted past the physical PM significant wave height for looks.
+- Foam is a cheap Jacobian-fold plus crest term, with no accumulation or advection.
+- Steepness is pushed past the physical PM significant wave height for looks.
 - Deep-water dispersion only.
-- A small scrolling normal map could add sub-metre ripple the mesh can't carry.
+- A small scrolling normal map could add the sub-metre ripple the mesh is too coarse to carry.
 
-Not trying to beat FFT on raw detail — that's its game.
+This leaves raw spectral detail to FFT and focuses on the light, seamless, query-anywhere side.
