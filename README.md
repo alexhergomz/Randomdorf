@@ -14,9 +14,8 @@ The standard Tessendorf ocean builds a Gaussian height field by inverse-FFT of a
 oceanographic spectrum (Phillips, Pierson-Moskowitz, JONSWAP). That field is itself a sum of
 sinusoids, so you can sample M wave components straight from the spectrum and add them per
 vertex instead of transforming a full grid. Pick the modes from the spectrum (Wiener-Khinchin
-/ random-phase model, the "RFF" view from kernel methods) and the statistics match. The whole
-thing fits in one spatial shader that does the displacement and the analytic normals, with
-nothing else in the pipeline.
+/ random-phase model, the "RFF" view from kernel methods) and the statistics match. The wave
+field fits in one spatial shader that does the displacement and the analytic normals.
 
 `analysis/verify_rff.py` checks it against the spectrum: variance equals sigma^2,
 autocovariance equals the analytic integral of F(k)*J0(kr), heights are Gaussian, and the
@@ -65,20 +64,27 @@ coverage with cheap LOD.
 Godot 4.5+.
 
 ```
-godot --path godot                 # ocean
-godot --path godot -- --lodview    # coloured LOD rings
+godot --path godot                    # ocean
+godot --path godot -- --sea=storm     # calm, moderate, rough, storm, swell
+godot --path godot -- --foam-buffer   # persistent foam accumulation
+godot --path godot -- --lodview       # coloured LOD rings
 ```
 
 `godot/run.sh` forces the integrated GPU, a hybrid-laptop workaround you can ignore otherwise.
 
 ## Notes
 
-- Foam is a cheap Jacobian-fold plus crest term, with no accumulation or advection.
+- Shading is a stylized pass after the Sea of Thieves look: a deep colour blended with a
+  subsurface colour by sun direction and a wave-peak mask, soft sky reflection, a sharp sun
+  glint, and a tiling mipmapped normal map for the sub-metre ripple the mesh is too coarse to
+  carry.
+- Foam is a Jacobian-fold-plus-crest mask at breaking crests. `--foam-buffer` adds an optional
+  persistent accumulation buffer (a decaying SubViewport) over a world-fixed region.
 - Steepness is pushed past the physical PM significant wave height for looks.
 - Deep-water dispersion only.
 
 ## Maybe later
 
-- A scrolling detail normal map for the sub-metre ripple the mesh is too coarse to carry.
 - Shallow-water dispersion (tanh(kd)) for coastlines.
-- Foam that accumulates and advects instead of being recomputed per frame.
+- A camera-following foam buffer that advects, instead of the current world-fixed region.
+- Spray or whitecap particles on the steepest breaks.
