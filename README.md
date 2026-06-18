@@ -78,17 +78,21 @@ grows with the grid for both. Scaling the RFF grid to the FFT reference on the 4
 
 ![pareto](media/pareto.png)
 
-- Match speed: at the FFT's ~0.34 ms for three cascades (a 65k-point tile that repeats), RFF
-  evaluates about 43k unique points using under 1 MB, against the FFT's ~9 MB. So at equal
-  speed RFF is roughly 10x lighter.
-- Match memory: at the FFT's ~9 MB, RFF covers about 470k unique points, but that takes
-  ~7 ms, roughly 20x the FFT. The FFT spends most of its memory on the grid spectrum and the
-  stored field; RFF spends it on output points.
+- Equal unique coverage (the fair axis): for the same number of distinct samples, RFF uses
+  about 7x less memory across the range. On time it is faster at small fields (tens of
+  thousands of points), about 2x slower at 65k, and about 9x at 1M, since RFF is linear in
+  points while the FFT is N log N.
+- Match speed: at the FFT's ~0.37 ms for three cascades (65k unique points), RFF does about
+  44k unique points using under 1 MB against the FFT's ~9 MB, so about 10x lighter.
+- Match memory: at the FFT's ~9 MB, RFF covers about 470k unique points, but at ~7 ms, about
+  19x slower.
 
-So it is a tradeoff, and RFF is not grid-independent: its mode table is tiny, but the rest of
-its memory is the output it produces, the same O(grid) the FFT pays. RFF reaches memory below
-the FFT's smallest useful tile and stays lighter at equal speed, while the FFT wins on large
-unique fields and tiles to cover unbounded area at fixed cost.
+RFF is not grid-independent: its mode table is tiny, but the rest of its memory is the output
+it produces, the same O(grid) the FFT pays. Tiling gets no credit here: the FFT can repeat its
+one patch to fill more area, but that repetition is not physical and the pipeline spends real
+effort hiding it (the Ubisoft writeup above), while RFF coverage is unique by construction. So
+the honest summary is a memory-for-time trade at equal unique detail, about 7x lighter and,
+beyond small fields, a few times slower.
 
 ## Run
 

@@ -93,8 +93,15 @@ print(f"GPU: {name}")
 print(f"FFT N=256, 3 cascades: {t_ref:.3f} ms, {mem_ref:.1f} MB, 65k-pt tile (tiles infinitely)")
 print(f"iso-speed : RFF ~{P_speed:,.0f} unique pts at the FFT's time  -> {rff_mem(P_speed, M0):.2f} MB")
 print(f"iso-memory: RFF ~{P_mem:,.0f} unique pts at the FFT's memory -> {at(Ps, g_t, P_mem):.2f} ms")
-print("(RFF unique points do not repeat; the FFT tile does. Output counted for both;")
-print(" the fused vertex shader streams its output, so real RFF memory is a bit below this.)")
+print("(Output counted for both; the fused vertex shader streams its output, so real RFF")
+print(" memory is a bit below this. Tiling gives the FFT no credit here: it repeats one")
+print(" patch, which is not physical, so the fair axis is equal unique coverage below.)")
+
+print("\nEqual unique coverage (FFT N^2 distinct samples vs RFF P distinct points):")
+for i, N in enumerate(fftN):
+    S = N*N
+    print(f"  S={S:>9,}: FFT {fft_t[i]:.2f} ms / {fft_mem[i]:5.1f} MB   "
+          f"RFF {at(Ps, g_t, S):.2f} ms / {rff_mem(S, M0):5.1f} MB")
 
 plt.figure(figsize=(7.2, 5.0))
 plt.loglog(fft_mem, fft_t, "o-", color="#c44", label="FFT, scale tile N (3 cascades)")
