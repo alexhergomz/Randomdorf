@@ -63,8 +63,26 @@ Use FFT for a detailed AAA ocean. Reach for RFF when memory or pipeline simplici
 coverage with cheap LOD.
 
 Those numbers are the wave field alone. The full Godot scene shown here, with the shading
-pass, foam, detail normal map, and reflection, measures about 2 to 3 ms at 720p on the same
-GPU; that cost applies on top of either wave method.
+pass, foam, detail normal map, and reflection, measures about 2 to 3 ms at 720p on the RTX
+4050; that cost applies on top of either wave method.
+
+### Scaling to match the FFT
+
+Two small experiments scaling the RFF mode count M to the FFT reference, both on the 4050
+(`analysis/bench_gpu.py`). Absolute frame times jitter on a laptop GPU, so the ratio is the
+point.
+
+- Iso-speed (match the FFT frame time): at the FFT's ~0.3 ms for three cascades, RFF affords
+  about 33 wave modes at a typical mesh vertex count, against the FFT's thousands. Per unit
+  time the FFT carries far more spectral detail.
+- Iso-memory (match the FFT's 5 to 12 MB): the RFF wave table is about 24 bytes per mode, so
+  the same budget would hold roughly 200k to 500k modes. Computing that many per vertex would
+  take about 5 to 11 seconds per frame, thousands of times the FFT, so the headroom is real
+  but unusable for compute.
+
+The two together: RFF is compute-bound, FFT is memory-bound. RFF is about 1000x lighter on
+memory but buys only a few dozen modes at equal speed, while the FFT's larger footprint buys
+thousands of modes at a fixed, tiny compute cost.
 
 ## Run
 
@@ -77,7 +95,8 @@ godot --path godot -- --foam-buffer   # persistent foam accumulation
 godot --path godot -- --lodview       # coloured LOD rings
 ```
 
-`godot/run.sh` forces the integrated GPU, a hybrid-laptop workaround you can ignore otherwise.
+`godot/run.sh` is a convenience launcher. On a hybrid laptop, render on the discrete GPU (for
+example `prime-select nvidia`).
 
 ## Notes
 
