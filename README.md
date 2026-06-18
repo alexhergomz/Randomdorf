@@ -1,12 +1,15 @@
 # Randomdorf
 
-Real-valued ocean waves with Random Fourier Features instead of an FFT.
+Real-valued ocean waves built from Random Fourier Features instead of an FFT, in Godot.
 
-> WIP / experiment. Built to see how far a Tessendorf-style ocean gets when you sum
-> spectral waves directly rather than running an FFT, and where that pays off against the
-> usual FFT pipeline. Still rough.
+> WIP / experiment. It sums spectral wave components directly rather than running an FFT, to
+> see how that compares with the usual FFT ocean and where it pays off. Still rough.
 
 ![ocean](media/ocean.gif)
+
+A Pierson-Moskowitz / JONSWAP spectrum sampled as M wave modes and summed in one spatial
+shader, with analytic normals, Nyquist LOD, cheap buoyancy at any point, and a stylized
+shading pass with foam. Sea state and foam are command-line flags (see Run).
 
 ## Idea
 
@@ -58,6 +61,10 @@ coverage that stays seamless, and Nyquist LOD for free.
 Use FFT for a detailed AAA ocean. Reach for RFF when memory or pipeline simplicity matter
 (mobile, web, many small water bodies, lots of physics queries), or when you want seamless
 coverage with cheap LOD.
+
+Those numbers are the wave field alone. The full Godot scene shown here, with the shading
+pass, foam, detail normal map, and reflection, measures about 2 to 3 ms at 720p on the same
+GPU; that cost applies on top of either wave method.
 
 ## Run
 
