@@ -40,7 +40,7 @@ On an RTX 4050 (`analysis/bench_gpu.py`):
 | | FFT Tessendorf (3 cascades) | RFF (M=64, with LOD) |
 |---|---|---|
 | GPU / frame | ~0.55 ms | ~0.90 ms |
-| Memory | 5 to 12 MB (spectra + maps) | ~2 KB (wave table) |
+| Stored state | 5 to 12 MB (spectrum + field maps) | ~2 KB mode table, field streamed |
 | Spectral detail | thousands of modes | 64 modes |
 | Normals | extra transforms | analytic, free |
 | Query any point (buoyancy) | sample a texture | direct h(x,z,t) |
@@ -54,9 +54,10 @@ problem (see Tessendorf's notes, and Ubisoft's
 [tiling-and-blending writeup](https://www.ubisoft.com/en-us/studio/laforge/news/5WHMK3tLGMGsqhxmWls1Jw/making-waves-in-ocean-surface-rendering-using-tiling-and-blending)
 on the machinery used just to hide tile repetition).
 
-RFF trades that throughput for memory and a simple pipeline: roughly 1000x less memory, a
-single shader, exact analytic normals, the surface value at any point for cheap buoyancy,
-coverage that stays seamless, and Nyquist LOD for free.
+RFF trades that throughput for a tiny stored footprint and a simple pipeline: an M-mode table
+with the field streamed per vertex rather than a stored grid spectrum and maps (the Scaling
+section has the full memory tradeoff), a single shader, exact analytic normals, the surface
+value at any point for cheap buoyancy, coverage that stays seamless, and Nyquist LOD for free.
 
 Use FFT for a detailed AAA ocean. Reach for RFF when memory or pipeline simplicity matter
 (mobile, web, many small water bodies, lots of physics queries), or when you want seamless
@@ -68,24 +69,26 @@ pass, foam, detail normal map, and reflection, measures about 2 to 3 ms at 720p 
 
 ### Scaling to match the FFT
 
-The FFT's tile size N sets coverage, memory, and time together, then tiles to fill any area.
-RFF splits those into two knobs: grid size P (points evaluated) for coverage and speed, and
-mode count M for spectral detail and memory. So matching the FFT in each sense lands on a
-different knob (`analysis/pareto.py`, on the 4050; laptop clocks jitter, so read the shape).
+Both methods are sums of spectral modes. The FFT keeps one amplitude per grid wavenumber, so
+its spectrum is O(grid), and it stores the field as textures, then tiles that field over any
+area. RFF keeps M modes (a few KB) and evaluates the surface per vertex, so its coverage is
+unique with no repeat. Producing P points is O(P) output for either method, so total memory
+grows with the grid for both. Scaling the RFF grid to the FFT reference on the 4050
+(`analysis/pareto.py`; laptop clocks jitter, so read the shape):
 
 ![pareto](media/pareto.png)
 
-- Match speed by grid: at the FFT's ~0.3 ms for three cascades (N=256, a 65k-point tile that
-  repeats), RFF evaluates about 40k unique points, roughly 0.6x the tile and non-repeating.
-  Same order of magnitude.
-- Match memory by grid: not reachable. The RFF state is the wave table, about 1.5 KB at
-  M=64, independent of grid size, so it stays roughly 6000x under the FFT's ~9 MB at any grid.
-  Reaching the FFT's memory means scaling modes instead, into the hundreds of thousands, where
-  the compute would cost seconds per frame.
+- Match speed: at the FFT's ~0.34 ms for three cascades (a 65k-point tile that repeats), RFF
+  evaluates about 43k unique points using under 1 MB, against the FFT's ~9 MB. So at equal
+  speed RFF is roughly 10x lighter.
+- Match memory: at the FFT's ~9 MB, RFF covers about 470k unique points, but that takes
+  ~7 ms, roughly 20x the FFT. The FFT spends most of its memory on the grid spectrum and the
+  stored field; RFF spends it on output points.
 
-On the plot, scaling RFF's grid moves it straight up (more time, flat memory) while scaling
-the FFT tile moves it up and to the right. RFF stays about three orders of magnitude to the
-left, which is the memory story; the FFT wins on coverage per millisecond because it tiles.
+So it is a tradeoff, and RFF is not grid-independent: its mode table is tiny, but the rest of
+its memory is the output it produces, the same O(grid) the FFT pays. RFF reaches memory below
+the FFT's smallest useful tile and stays lighter at equal speed, while the FFT wins on large
+unique fields and tiles to cover unbounded area at fixed cost.
 
 ## Run
 

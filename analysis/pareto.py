@@ -50,7 +50,10 @@ def make_rff(M, P, L=256.0):
     return frame
 
 CASC = 3                       # a production FFT ocean runs ~3 spectral bands (cascades)
-RFF_BYTES = 24                 # wave-table per mode: kop(16)+amp(4)+phase(4)
+TABLE = 24                     # RFF wave-table per mode: kop(16)+amp(4)+phase(4)
+OUT = 20                       # per-point output produced: displacement + normal (5 floats)
+def rff_mem(P, M):             # parameters plus the output produced at P points
+    return (TABLE*M + OUT*P)/1e6
 
 # FFT: scale the tile N (3 cascades)
 fftN = [128, 256, 512, 1024]
@@ -63,28 +66,35 @@ for N in fftN:
 M0 = 64
 Ps = [16_000, 32_000, 64_000, 128_000, 256_000, 512_000, 1_000_000]
 g_t = [gpu_time(make_rff(M0, P))[0] for P in Ps]
-g_mem = [RFF_BYTES*M0/1e6]*len(Ps)
+g_mem = [rff_mem(P, M0) for P in Ps]      # output is O(P), so memory grows with the grid
 
-# RFF: scale modes M at fixed P=77k (this moves memory)
+# RFF: scale modes M at fixed P=77k
 P0 = 77_000
 Ms = [16, 32, 64, 128, 256]
 m_t = [gpu_time(make_rff(M, P0))[0] for M in Ms]
-m_mem = [RFF_BYTES*M/1e6 for M in Ms]
+m_mem = [rff_mem(P0, M) for M in Ms]      # output fixed by P0, so this barely moves
 
-# iso-speed grid: where the RFF grid line meets the FFT N=256 time
-t_ref = fft_t[1]
-def interp(xs, ys, y):
+# interpolate y at x and x at y on a monotone-ish curve
+def at(xs, ys, x):
+    for i in range(1, len(xs)):
+        if (xs[i-1]-x)*(xs[i]-x) <= 0:
+            f = (x-xs[i-1])/(xs[i]-xs[i-1]); return ys[i-1]+f*(ys[i]-ys[i-1])
+    return ys[-1]*x/xs[-1]
+def inv(xs, ys, y):
     for i in range(1, len(ys)):
         if (ys[i-1]-y)*(ys[i]-y) <= 0:
             f = (y-ys[i-1])/(ys[i]-ys[i-1]); return xs[i-1]+f*(xs[i]-xs[i-1])
     return xs[-1]*y/ys[-1]
-P_iso = interp(Ps, g_t, t_ref)
+
+t_ref, mem_ref = fft_t[1], fft_mem[1]
+P_speed = inv(Ps, g_t, t_ref)        # grid size that matches the FFT's time
+P_mem   = inv(Ps, g_mem, mem_ref)    # grid size that matches the FFT's memory
 print(f"GPU: {name}")
-print(f"FFT N=256, 3 cascades: {t_ref:.3f} ms, {fft_mem[1]:.1f} MB, tile = {256*256:,} pts (tiles)")
-print(f"iso-speed grid: RFF matches that time at P ~ {P_iso:,.0f} pts "
-      f"(~{P_iso/(256*256):.2f}x the tile), unique, no repeat")
-print(f"iso-memory: RFF wave table = {RFF_BYTES*M0} B at any grid size; "
-      f"~{fft_mem[1]/(RFF_BYTES*M0/1e6):.0f}x under the FFT regardless of P")
+print(f"FFT N=256, 3 cascades: {t_ref:.3f} ms, {mem_ref:.1f} MB, 65k-pt tile (tiles infinitely)")
+print(f"iso-speed : RFF ~{P_speed:,.0f} unique pts at the FFT's time  -> {rff_mem(P_speed, M0):.2f} MB")
+print(f"iso-memory: RFF ~{P_mem:,.0f} unique pts at the FFT's memory -> {at(Ps, g_t, P_mem):.2f} ms")
+print("(RFF unique points do not repeat; the FFT tile does. Output counted for both;")
+print(" the fused vertex shader streams its output, so real RFF memory is a bit below this.)")
 
 plt.figure(figsize=(7.2, 5.0))
 plt.loglog(fft_mem, fft_t, "o-", color="#c44", label="FFT, scale tile N (3 cascades)")
