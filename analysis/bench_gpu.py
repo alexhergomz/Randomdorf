@@ -68,25 +68,4 @@ for M in [48, 64, 96]:
 print("Notes: FFT cost is FIXED regardless of how many points sample the tile (then ~free")
 print("texture fetches). RFF cost = M x P. With LOD-omission the effective M per far point")
 print("drops (~50 avg in our clipmap), so real RFF scene cost is below the M=64 rows.")
-
-# ---------------- iso-speed / iso-memory: scale RFF to the FFT reference ----------------
-# FFT reference: 3 cascades at N=256, median of several (laptop GPU clocks jitter).
-fftf = make_fft(256)
-t_fft = sorted(gpu_time(fftf, iters=300)[0] for _ in range(7))[3] * 3
-
-P = 77_000
-Ms = [16, 24, 32, 40, 48, 64, 80, 96, 128]
-times = [gpu_time(make_rff(M, P), iters=300)[0] for M in Ms]
-# least-squares fit time = slope*M + b over the compute-bound range (M >= 40)
-hi = [(M, t) for M, t in zip(Ms, times) if M >= 40]
-n = len(hi); sM = sum(M for M, _ in hi); st = sum(t for _, t in hi)
-sMM = sum(M*M for M, _ in hi); sMt = sum(M*t for M, t in hi)
-slope = (n*sMt - sM*st) / (n*sMM - sM*sM); b = (st - slope*sM) / n
-
-bytes_per_mode = 24  # wave-table textures: kop(16) + amp(4) + phase(4)
-print(f"\n=== Scaling RFF to the FFT (P={P}) ===")
-print(f"  FFT 3 cascades: {t_fft:.3f} ms, memory ~5-12 MB")
-print(f"  iso-speed : RFF affords ~{(t_fft - b)/slope:.0f} modes at the FFT's frame time")
-for mem in (5, 12):
-    Mm = mem*1024*1024/bytes_per_mode
-    print(f"  iso-memory: {mem} MB -> ~{Mm:,.0f} modes, but ~{slope*Mm + b:.0f} ms/frame to compute")
+print("See pareto.py for the time-vs-memory frontier as you scale grid size and modes.")

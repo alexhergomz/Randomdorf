@@ -68,21 +68,24 @@ pass, foam, detail normal map, and reflection, measures about 2 to 3 ms at 720p 
 
 ### Scaling to match the FFT
 
-Two small experiments scaling the RFF mode count M to the FFT reference, both on the 4050
-(`analysis/bench_gpu.py`). Absolute frame times jitter on a laptop GPU, so the ratio is the
-point.
+The FFT's tile size N sets coverage, memory, and time together, then tiles to fill any area.
+RFF splits those into two knobs: grid size P (points evaluated) for coverage and speed, and
+mode count M for spectral detail and memory. So matching the FFT in each sense lands on a
+different knob (`analysis/pareto.py`, on the 4050; laptop clocks jitter, so read the shape).
 
-- Iso-speed (match the FFT frame time): at the FFT's ~0.3 ms for three cascades, RFF affords
-  about 33 wave modes at a typical mesh vertex count, against the FFT's thousands. Per unit
-  time the FFT carries far more spectral detail.
-- Iso-memory (match the FFT's 5 to 12 MB): the RFF wave table is about 24 bytes per mode, so
-  the same budget would hold roughly 200k to 500k modes. Computing that many per vertex would
-  take about 5 to 11 seconds per frame, thousands of times the FFT, so the headroom is real
-  but unusable for compute.
+![pareto](media/pareto.png)
 
-The two together: RFF is compute-bound, FFT is memory-bound. RFF is about 1000x lighter on
-memory but buys only a few dozen modes at equal speed, while the FFT's larger footprint buys
-thousands of modes at a fixed, tiny compute cost.
+- Match speed by grid: at the FFT's ~0.3 ms for three cascades (N=256, a 65k-point tile that
+  repeats), RFF evaluates about 40k unique points, roughly 0.6x the tile and non-repeating.
+  Same order of magnitude.
+- Match memory by grid: not reachable. The RFF state is the wave table, about 1.5 KB at
+  M=64, independent of grid size, so it stays roughly 6000x under the FFT's ~9 MB at any grid.
+  Reaching the FFT's memory means scaling modes instead, into the hundreds of thousands, where
+  the compute would cost seconds per frame.
+
+On the plot, scaling RFF's grid moves it straight up (more time, flat memory) while scaling
+the FFT tile moves it up and to the right. RFF stays about three orders of magnitude to the
+left, which is the memory story; the FFT wins on coverage per millisecond because it tiles.
 
 ## Run
 
