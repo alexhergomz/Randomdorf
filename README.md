@@ -39,8 +39,8 @@ At equal unique coverage (65k distinct samples) on an RTX 4050 (`analysis/pareto
 
 | | FFT Tessendorf (3 cascades) | RFF (M=64) |
 |---|---|---|
-| GPU / frame | ~0.37 ms | ~0.74 ms |
-| Memory (65k samples) | ~9 MB | ~1.3 MB |
+| GPU / frame | ~0.3 ms | ~1.3 ms |
+| Memory (65k samples) | ~8 MB | ~1.3 MB |
 | Spectral detail | thousands of modes | 64 modes |
 | Normals | extra transforms | analytic, free |
 | Query any point (buoyancy) | sample a texture | direct h(x,z,t) |
@@ -75,18 +75,19 @@ its spectrum is O(grid), and it stores the field as textures, then tiles that fi
 area. RFF keeps M modes (a few KB) and evaluates the surface per vertex, so its coverage is
 unique with no repeat. Producing P points is O(P) output for either method, so total memory
 grows with the grid for both. Scaling the RFF grid to the FFT reference on the 4050
-(`analysis/pareto.py`; laptop clocks jitter, so read the shape):
+(`analysis/pareto.py`, warm-clock medians since a laptop GPU boosts cold then settles;
+absolute times still jitter, so read the shape):
 
 ![pareto](media/pareto.png)
 
 - Equal unique coverage (the fair axis): for the same number of distinct samples, RFF uses
-  about 7x less memory across the range. On time it is faster at small fields (tens of
-  thousands of points), about 2x slower at 65k, and about 9x at 1M, since RFF is linear in
+  about 6x less memory across the range. On time it is faster at small fields (tens of
+  thousands of points), about 4x slower at 65k, and about 10x at 1M, since RFF is linear in
   points while the FFT is N log N.
-- Match speed: at the FFT's ~0.37 ms for three cascades (65k unique points), RFF does about
-  44k unique points using under 1 MB against the FFT's ~9 MB, so about 10x lighter.
-- Match memory: at the FFT's ~9 MB, RFF covers about 470k unique points, but at ~7 ms, about
-  19x slower.
+- Match speed: at the FFT's ~0.3 ms for three cascades (65k unique points), RFF does about
+  32k unique points using under 1 MB against the FFT's ~8 MB, so about 12x lighter.
+- Match memory: at the FFT's ~8 MB, RFF covers about 390k unique points, but at ~10 ms, about
+  30x slower.
 
 RFF is not grid-independent: its mode table is tiny, but the rest of its memory is the output
 it produces, the same O(grid) the FFT pays. Tiling gets no credit here: the FFT can repeat its

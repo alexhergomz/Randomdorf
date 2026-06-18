@@ -11,7 +11,7 @@ name = torch.cuda.get_device_name(0)
 
 def gpu_time(fn, iters=100, warm=15):
     for _ in range(warm): fn()
-    torch.cuda.synchronize(); torch.cuda.reset_peak_memory_stats()
+    torch.cuda.synchronize(); torch.cuda.empty_cache(); torch.cuda.reset_peak_memory_stats()
     s = torch.cuda.Event(True); e = torch.cuda.Event(True)
     s.record()
     for i in range(iters): fn(i)
@@ -55,23 +55,31 @@ OUT = 20                       # per-point output produced: displacement + norma
 def rff_mem(P, M):             # parameters plus the output produced at P points
     return (TABLE*M + OUT*P)/1e6
 
-# FFT: scale the tile N (3 cascades)
+# laptop GPUs boost on the first kernel after idle then settle lower; warm the clocks and
+# take a median so the numbers reflect sustained rendering, not a one-frame boost
+for _ in range(400): make_rff(64, 500_000)()
+torch.cuda.synchronize()
+def med(fn, k=5):
+    return sorted(gpu_time(fn)[0] for _ in range(k))[k // 2]
+
+# FFT: scale the tile N (3 cascades). Memory is the persistent state (spectrum h0 plus the
+# displacement and normal maps the mesh samples), ~40 bytes/texel/cascade; the transient cuFFT
+# workspace is scratch and is not counted. Time is measured (warm, median).
+FFT_BYTES = 40
 fftN = [128, 256, 512, 1024]
-fft_t, fft_mem = [], []
-for N in fftN:
-    t, v = gpu_time(make_fft(N))
-    fft_t.append(t*CASC); fft_mem.append(v*CASC)
+fft_t = [med(make_fft(N))*CASC for N in fftN]
+fft_mem = [FFT_BYTES * N*N * CASC / 1e6 for N in fftN]
 
 # RFF: scale the grid P at fixed M=64 (memory is grid-independent -> the wave table)
 M0 = 64
 Ps = [16_000, 32_000, 64_000, 128_000, 256_000, 512_000, 1_000_000]
-g_t = [gpu_time(make_rff(M0, P))[0] for P in Ps]
+g_t = [med(make_rff(M0, P)) for P in Ps]
 g_mem = [rff_mem(P, M0) for P in Ps]      # output is O(P), so memory grows with the grid
 
 # RFF: scale modes M at fixed P=77k
 P0 = 77_000
 Ms = [16, 32, 64, 128, 256]
-m_t = [gpu_time(make_rff(M, P0))[0] for M in Ms]
+m_t = [med(make_rff(M, P0)) for M in Ms]
 m_mem = [rff_mem(P0, M) for M in Ms]      # output fixed by P0, so this barely moves
 
 # interpolate y at x and x at y on a monotone-ish curve
