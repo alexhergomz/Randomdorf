@@ -35,21 +35,22 @@ resolution scales with the render resolution. Rings coloured by level:
 
 ## RFF vs FFT, measured
 
-On an RTX 4050 (`analysis/bench_gpu.py`):
+At equal unique coverage (65k distinct samples) on an RTX 4050 (`analysis/pareto.py`):
 
-| | FFT Tessendorf (3 cascades) | RFF (M=64, with LOD) |
+| | FFT Tessendorf (3 cascades) | RFF (M=64) |
 |---|---|---|
-| GPU / frame | ~0.55 ms | ~0.90 ms |
-| Stored state | 5 to 12 MB (spectrum + field maps) | ~2 KB mode table, field streamed |
+| GPU / frame | ~0.37 ms | ~0.74 ms |
+| Memory (65k samples) | ~9 MB | ~1.3 MB |
 | Spectral detail | thousands of modes | 64 modes |
 | Normals | extra transforms | analytic, free |
 | Query any point (buoyancy) | sample a texture | direct h(x,z,t) |
-| Tiling | repeats, needs blending to hide | seamless by construction |
+| Coverage | one patch, tiled (repeats) | unique, no repeat |
 | LOD | cascades / mip, awkward | drop modes, free |
 
-FFT is faster and carries far more detail, and that is fundamental. One transform yields all
-N^2 modes in O(N^2 log N), which works out to log R per output point against M for RFF, so for
-a dense detailed field it wins outright. Production FFT oceans are also a solved, well-tooled
+The FFT pulls ahead as the field grows and carries far more detail, and that is fundamental.
+One transform yields all N^2 modes in O(N^2 log N), which works out to log R per output point
+against M for RFF, so for a dense detailed field it wins on speed outright. Production FFT
+oceans are also a solved, well-tooled
 problem (see Tessendorf's notes, and Ubisoft's
 [tiling-and-blending writeup](https://www.ubisoft.com/en-us/studio/laforge/news/5WHMK3tLGMGsqhxmWls1Jw/making-waves-in-ocean-surface-rendering-using-tiling-and-blending)
 on the machinery used just to hide tile repetition).
